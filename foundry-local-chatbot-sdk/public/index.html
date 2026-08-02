@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local AI Assistant</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-focus: rgba(255, 255, 255, 0.12);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #6366f1;
+            --accent-hover: #4f46e5;
+            --user-bubble: rgba(99, 102, 241, 0.2);
+            --bot-bubble: rgba(255, 255, 255, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            padding: 16px;
+        }
+
+        /* Glassmorphic Container */
+        .app-container {
+            width: 100%;
+            max-width: 1000px;
+            height: 85vh;
+            min-height: 500px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Loading Overlay Screens */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0f172a;
+            border-radius: 24px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            padding: 40px;
+            text-align: center;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        .overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--glass-border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-text {
+            color: var(--text-secondary);
+            margin-top: 12px;
+            font-size: 0.95rem;
+        }
+
+        /* Header Layout */
+        header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.03);
+            padding: 6px 12px;
+            border-radius: 100px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border-radius: 50%;
+        }
+
+        .status-dot.online {
+            background: #10b981;
+            box-shadow: 0 0 12px #10b981;
+        }
+
+        /* Chat Layout Area */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Webkit scrollbar customization */
+        .chat-area::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-area::-webkit-scrollbar-thumb {
+            background: var(--glass-border);
+            border-radius: 100px;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 14px 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--user-bubble);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--bot-bubble);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.system-alert {
+            align-self: center;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            text-align: center;
+        }
+
+        .message.assistant p {
+            margin-bottom: 0.75rem;
+        }
+
+        .message.assistant p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message.assistant strong {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .message.assistant em {
+            font-style: italic;
+            color: #e2e8f0;
+        }
+
+        .message.assistant code {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 0.15rem 0.4rem;
+            font-family: "Cascadia Code", Consolas, monospace;
+            font-size: 0.9em;
+        }
+
+        .message.assistant pre {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+        }
+
+        .message.assistant pre code {
+            background: transparent;
+            border: none;
+            padding: 0;
+        }
+
+        .message.assistant ul,
+        .message.assistant ol {
+            padding-left: 1.2rem;
+            margin: 0.5rem 0 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .message.assistant blockquote {
+            border-left: 3px solid var(--accent);
+            padding-left: 0.8rem;
+            margin: 0.75rem 0;
+            color: var(--text-secondary);
+        }
+
+        .message.assistant a {
+            color: #93c5fd;
+            text-decoration: underline;
+            word-break: break-word;
+        }
+
+        .message.assistant a:hover {
+            color: #bfdbfe;
+        }
+
+        .message.assistant.thinking {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 48px;
+        }
+
+        .thinking-label {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .thinking-dots {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .thinking-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: bounce 1.2s infinite ease-in-out;
+        }
+
+        .thinking-dots span:nth-child(2) {
+            animation-delay: 0.16s;
+        }
+
+        .thinking-dots span:nth-child(3) {
+            animation-delay: 0.32s;
+        }
+
+        @keyframes bounce {
+            0%, 80%, 100% {
+                transform: scale(0.7);
+                opacity: 0.45;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        /* Input Controls Layout */
+        .input-panel {
+            padding: 20px 24px;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            padding: 6px 6px 6px 16px;
+            border-radius: 16px;
+            transition: border-color 0.2s ease;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: var(--accent);
+        }
+
+        input {
+            flex: 1;
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            padding: 8px 0;
+        }
+
+        input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            outline: none;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background: var(--glass-border);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        /* Media Queries for Responsive Viewports */
+        @media (max-width: 640px) {
+            body {
+                padding: 0;
+            }
+            .app-container {
+                height: 100vh;
+                border-radius: 0;
+                border: none;
+            }
+            .overlay {
+                border-radius: 0;
+            }
+            .message {
+                max-width: 85%;
+            }
+            header, .input-panel {
+                padding: 16px;
+            }
+            .chat-area {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div id="loader-overlay" class="overlay">
+            <div class="spinner"></div>
+            <h2>Spinning up Local Foundry Environment</h2>
+            <p id="loader-status" class="status-text">Connecting to instance service...</p>
+        </div>
+
+        <header>
+            <div class="brand">
+                <h1>Local LLM Workspace</h1>
+            </div>
+            <div class="status-badge">
+                <div id="status-dot" class="status-dot"></div>
+                <span id="status-label">Offline Core</span>
+            </div>
+        </header>
+
+        <div id="chat-area" class="chat-area">
+            </div>
+
+        <div class="input-panel">
+            <form id="chat-form" class="input-wrapper">
+                <input type="text" id="user-input" placeholder="Ask your local model anything..." autocomplete="off" disabled>
+                <button type="submit" id="send-btn" disabled>Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Set up local chat state structures matching standard multi-turn structures
+        const conversationHistory = [
+            { 
+                role: 'system', 
+                content: 'You are a helpful, friendly assistant. Keep your responses concise and conversational. If you don\'t know something, say so.' 
+            }
+        ];
+
+        const loaderOverlay = document.getElementById('loader-overlay');
+        const loaderStatus = document.getElementById('loader-status');
+        const statusDot = document.getElementById('status-dot');
+        const statusLabel = document.getElementById('status-label');
+        const chatArea = document.getElementById('chat-area');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // Poll API to track local hardware setup lifecycle status
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                if (data.ready) {
+                    loaderOverlay.classList.add('hidden');
+                    statusDot.classList.add('online');
+                    statusLabel.textContent = 'Foundry Local Active';
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    
+                    // Inject introductory placeholder message
+                    appendMessage('assistant', 'Hello! Your local model is compiled and active. How can I help you today?');
+                    clearInterval(statusPoller);
+                } else {
+                    loaderStatus.textContent = data.status;
+                }
+            } catch (err) {
+                loaderStatus.textContent = "Waiting for local Express backend server service node...";
+            }
+        }
+
+        const statusPoller = setInterval(checkServerStatus, 1500);
+
+        marked.setOptions({
+            gfm: true,
+            breaks: true,
+            headerIds: false,
+            mangle: false
+        });
+
+        function renderMarkdownToSafeHtml(markdown) {
+            const rawHtml = marked.parse(String(markdown || ''));
+            return DOMPurify.sanitize(rawHtml, {
+                USE_PROFILES: { html: true },
+                ADD_ATTR: ['target', 'rel']
+            });
+        }
+
+        function appendMessage(role, text, options = {}) {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', role);
+            const renderMarkdown = options.renderMarkdown ?? role === 'assistant';
+            if (renderMarkdown) {
+                msgDiv.innerHTML = renderMarkdownToSafeHtml(text);
+            } else {
+                msgDiv.textContent = String(text);
+            }
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return msgDiv;
+        }
+
+        function appendThinkingIndicator() {
+            const msgDiv = document.createElement('div');
+            msgDiv.classList.add('message', 'assistant', 'thinking');
+            msgDiv.innerHTML = '<span class="thinking-label">AI is thinking</span><span class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></span>';
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return msgDiv;
+        }
+
+        function replaceThinkingIndicator(messageEl, html) {
+            messageEl.classList.remove('thinking');
+            messageEl.innerHTML = html;
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // Handle submissions across standard fetch endpoints
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const prompt = DOMPurify.sanitize(userInput.value.trim(), {
+                ALLOWED_TAGS: [],
+                ALLOWED_ATTR: []
+            });
+
+            if (!prompt) return;
+
+            // Clear input box immediately
+            userInput.value = '';
+            
+            // Append user prompt to UI and local structural array
+            appendMessage('user', prompt);
+            conversationHistory.push({ role: 'user', content: prompt });
+
+            // Lock controls while awaiting execution response
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+            const thinkingMessage = appendThinkingIndicator();
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: conversationHistory })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Inference compilation failure.');
+                }
+
+                const data = await response.json();
+                
+                // Track state back to history array and display message
+                replaceThinkingIndicator(thinkingMessage, renderMarkdownToSafeHtml(data.message.content));
+                conversationHistory.push(data.message);
+
+            } catch (error) {
+                console.error(error);
+                replaceThinkingIndicator(thinkingMessage, `<p>Sorry, I hit an issue: ${DOMPurify.sanitize(error.message)}</p>`);
+            } finally {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>

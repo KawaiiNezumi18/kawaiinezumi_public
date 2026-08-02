@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foundry Local Web Chat</title>
+  <style>
+    :root {
+      --bg-color: #f4f6f9;
+      --panel-bg: #ffffff;
+      --text-color: #333333;
+      --primary-color: #0078d4;
+      --user-msg: #def0ff;
+      --ai-msg: #f0f0f0;
+      --border-color: #e0e0e0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Configuration Panel Layout */
+    header {
+      background-color: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: center;
+    }
+
+    .config-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .config-group label {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .config-group input {
+      padding: 5px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    /* Chat History Window */
+    #chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .message {
+      max-width: 75%;
+      padding: 12px 16px;
+      border-radius: 8px;
+      line-height: 1.5;
+      font-size: 15px;
+      word-wrap: break-word;
+    }
+
+    .message.user {
+      background-color: var(--user-msg);
+      align-self: flex-end;
+    }
+
+    .message.assistant {
+      background-color: var(--ai-msg);
+      align-self: flex-start;
+    }
+
+    .message.assistant p {
+      margin: 0 0 0.75em;
+    }
+
+    .message.assistant p:last-child {
+      margin-bottom: 0;
+    }
+
+    .message.assistant ul,
+    .message.assistant ol {
+      padding-left: 1.2rem;
+      margin: 0.5rem 0;
+    }
+
+    .message.assistant pre {
+      background: #f3f3f3;
+      padding: 0.75rem;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+
+    .message.assistant code {
+      background: #f3f3f3;
+      padding: 0.15rem 0.3rem;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+    }
+
+    .message.system-status {
+      background-color: transparent;
+      color: #666;
+      font-size: 12px;
+      text-align: center;
+      align-self: center;
+    }
+
+    /* Input Bar */
+    footer {
+      background-color: var(--panel-bg);
+      border-top: 1px solid var(--border-color);
+      padding: 15px 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    #user-input {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 15px;
+      outline: none;
+    }
+
+    #user-input:focus {
+      border-color: var(--primary-color);
+    }
+
+    button {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 0 20px;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="config-group">
+      <label for="endpoint-port">Foundry Port:</label>
+      <!-- Change this port to match your current active `foundry service status` output -->
+      <input type="text" id="endpoint-port" value="5272" style="width: 70px;">
+    </div>
+    <div class="config-group">
+      <label for="model-name">Model ID:</label>
+      <input type="text" id="model-name" value="qwen2.5-1.5b-instruct-generic-cpu:4" style="width: 280px;">
+    </div>
+  </header>
+
+  <main id="chat-container">
+    <div class="message system-status">Conversation initialized. Type a prompt below to communicate with your local model.</div>
+  </main>
+
+  <footer>
+    <input type="text" id="user-input" placeholder="Ask your local model anything..." autocomplete="off">
+    <button id="send-btn" onclick="sendMessage()">Send</button>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  
+  <script>
+    const chatContainer = document.getElementById('chat-container');
+    const userInputField = document.getElementById('user-input');
+    const sendButton = document.getElementById('send-btn');
+
+    // Maintain session message logs for history tracking
+    let conversationHistory = [
+      { role: 'system', 
+        content: 'You are a helpful, friendly assistant. Keep your responses ' +
+                'concise and conversational. If you don\'t know something, say so.'
+      }
+    ];
+
+    // Trigger submission on Enter key
+    userInputField.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+
+    async function sendMessage() {
+      const prompt = userInputField.value.trim();
+      if (!prompt) return;
+
+      // Extract current configurations
+      const port = document.getElementById('endpoint-port').value.trim();
+      const model = document.getElementById('model-name').value.trim();
+      const targetUrl = `http://localhost:${port}/v1/chat/completions`;
+
+      // UI modifications during process state
+      appendMessage('user', prompt);
+      userInputField.value = '';
+      setLoadingState(true);
+
+      // Add user prompt to systemic memory
+      conversationHistory.push({ role: 'user', content: prompt });
+
+      // Establish dynamic visual block for the incoming stream/text response
+      const aiMessageElement = appendMessage('assistant', 'AI is thinking...');
+
+      try {
+        const response = await fetch(targetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            // No API key is needed by Foundry, but standard headers maintain structural alignment
+            'Authorization': 'Bearer local-no-key' 
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: conversationHistory,
+            temperature: 0.7
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP network error! Status Code: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const aiReply = data.choices[0].message.content;
+
+        // Render response to UI and append to memory logs
+        aiMessageElement.innerHTML = renderMarkdownToHtml(aiReply);
+        conversationHistory.push({ role: 'assistant', content: aiReply });
+
+      } catch (error) {
+        console.error(error);
+        aiMessageElement.style.color = '#d83b01';
+        aiMessageElement.textContent = `Error connecting to your model. Verify that "foundry service status" shows port ${port} is active, and your browser allows local HTTP fetch. Detail: ${error.message}`;
+      } finally {
+        setLoadingState(false);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+      }
+    }
+
+    function renderMarkdownToHtml(markdown) {
+      if (!markdown) return '';
+
+      if (window.marked) {
+        const parsedHtml = marked.parse(markdown);
+        return window.DOMPurify ? DOMPurify.sanitize(parsedHtml) : parsedHtml;
+      }
+
+      return markdown.replace(/\n/g, '<br>');
+    }
+
+    function appendMessage(role, text) {
+      const msgDiv = document.createElement('div');
+      msgDiv.classList.add('message', role);
+      msgDiv.textContent = text;
+      chatContainer.appendChild(msgDiv);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      return msgDiv;
+    }
+
+    function setLoadingState(isLoading) {
+      userInputField.disabled = isLoading;
+      sendButton.disabled = isLoading;
+      if (!isLoading) {
+        userInputField.focus();
+      }
+    }
+  </script>
+</body>
+</html>

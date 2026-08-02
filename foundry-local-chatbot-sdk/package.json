@@ -1,0 +1,23 @@
+{
+  "name": "foundry-local-chatbot-sdk",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "express": "^5.2.1",
+    "foundry-local-sdk-winml": "^1.2.3",
+    "openai": "^6.48.0"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0"
+  }
+}
