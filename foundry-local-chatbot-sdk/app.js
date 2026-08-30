@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { FoundryLocalManager } from 'foundry-local-sdk';
+import { processToolCalls, tools } from './tools.js';
 
 // Create the Express application and configure the local web server.
 const app = express();
@@ -91,13 +92,17 @@ app.post('/api/chat', async (req, res) => {
 
     try {
         // Pass the full conversation trace so the model can keep context.
-        const response = await chatClient.completeChat(messages);
+        // Include the registered tool schemas so the model can request a tool
+        // when a question needs live information such as current weather.
+        const response = await chatClient.completeChat(messages, tools);
 
-        // Normalize the SDK response into the shape expected by the frontend.
-        const assistantMessage = response.choices[0]?.message || {
-            role: 'assistant',
-            content: "I'm sorry, I couldn't generate a response."
-        };
+        // Execute any requested tools and continue prompting until the model
+        // produces the final assistant message for the frontend.
+        const assistantMessage = await processToolCalls(
+            messages,
+            response,
+            chatClient
+        );
 
         res.json({ message: assistantMessage });
     } catch (error) {
