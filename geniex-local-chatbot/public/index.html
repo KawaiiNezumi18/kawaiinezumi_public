@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemma 4 AI Chatbot</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- These scripts enable markdown rendering and safe HTML output for AI responses. -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+</head>
+<body>
+  <div class="chat-container">
+    <!-- The header shows the chat title and the current backend status. -->
+    <header class="chat-header">
+      <div class="header-info">
+        <h1>AI Assistant</h1>
+        <span class="badge">Powered by Gemma 4 E2B</span>
+      </div>
+      <div id="status-indicator" class="status-badge checking">
+        <span class="dot"></span> <span id="status-text">Checking GenieX...</span>
+      </div>
+    </header>
+
+    <!-- This banner appears when the local GenieX server is unreachable or the model is not loaded. -->
+    <div id="offline-banner" class="offline-banner hidden">
+      <h3>⚠️ GenieX Server or Model Not Ready</h3>
+      <p>Please follow these steps to start the service:</p>
+      <ol>
+        <li>Pull the model in your terminal:
+          <code>geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf</code>
+        </li>
+        <li>Start the server:
+          <code>geniex serve</code>
+        </li>
+        <li>Refresh this page or restart the app.</li>
+      </ol>
+    </div>
+
+    <!-- This is the message area where user and assistant messages are appended dynamically. -->
+    <main class="chat-body" id="chat-body">
+      <div class="message system-message">
+        Hello! How can I assist you today?
+      </div>
+    </main>
+
+    <!-- The input form is where the user types prompts and submits them to the backend. -->
+    <footer class="chat-footer">
+      <form id="chat-form">
+        <input 
+          type="text" 
+          id="user-input" 
+          placeholder="Type your message..." 
+          autocomplete="off" 
+          required 
+        />
+        <button type="submit" id="send-btn">Send</button>
+      </form>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
