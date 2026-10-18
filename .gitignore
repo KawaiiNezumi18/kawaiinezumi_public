@@ -1,2 +1,26 @@
 # Ignore any folder named "node_modules" anywhere in the project
 node_modules/
+
+# Build outputs
+dist/
+out/
+*.exe
+*.dmg
+*.AppImage
+
+# Databases & local user state
+db/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
